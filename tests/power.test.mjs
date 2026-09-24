@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {convertPower} from '../public/power.mjs';
+test('metric horsepower converts both ways without integer rounding',()=>{assert.equal(convertPower('100','kw'),'135.96');assert.equal(convertPower('190','kw'),'258.33');assert.equal(convertPower('258','hp'),'189.76');assert.equal(convertPower('156','hp'),'114.74');});
+test('localised input and incomplete values do not leave a stale conversion',()=>{assert.equal(convertPower('100,5','kw'),'136.64');assert.equal(convertPower(' 1 000 ','kw'),'1359.62');for(const x of ['',',','-5','abc','Infinity'])assert.equal(convertPower(x,'kw'),'');});

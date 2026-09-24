@@ -1,0 +1,10 @@
+data/
+dist/
+node_modules/
+.DS_Store
+.env
+.env.*
+*.log
+*.pkg
+*.zip
+*.app/
