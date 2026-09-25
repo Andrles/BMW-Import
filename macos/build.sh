@@ -6,14 +6,7 @@ DEST="$BUILD_ROOT/BMW Import.app"
 NODE="${BMW_NODE:-$(command -v node || true)}"
 [[ -x "$NODE" ]] || { echo "Install Node.js 22+ or set BMW_NODE." >&2; exit 1; }
 mkdir -p "$DEST/Contents/MacOS" "$DEST/Contents/Resources/app" "$DEST/Contents/Resources/initialData/quotes"
-ICONSET="$BUILD_ROOT/AppIcon.iconset"
-mkdir -p "$ICONSET"
-for SIZE in 16 32 128 256 512; do
- sips -z "$SIZE" "$SIZE" "$SOURCE/macos/AppIcon.png" --out "$ICONSET/icon_${SIZE}x${SIZE}.png" >/dev/null
- DOUBLE=$((SIZE * 2))
- sips -z "$DOUBLE" "$DOUBLE" "$SOURCE/macos/AppIcon.png" --out "$ICONSET/icon_${SIZE}x${SIZE}@2x.png" >/dev/null
-done
-iconutil -c icns "$ICONSET" -o "$DEST/Contents/Resources/AppIcon.icns"
+cp "$SOURCE/macos/AppIcon.icns" "$DEST/Contents/Resources/AppIcon.icns"
 cp "$NODE" "$DEST/Contents/Resources/node"
 cp "$SOURCE/server.mjs" "$DEST/Contents/Resources/app/"
 cp -R "$SOURCE/public" "$DEST/Contents/Resources/app/"
@@ -31,8 +24,8 @@ cat > "$DEST/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>BMW Import</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.4.1</string>
-<key>CFBundleVersion</key><string>6</string>
+<key>CFBundleShortVersionString</key><string>0.5.0</string>
+<key>CFBundleVersion</key><string>7</string>
 <key>LSMinimumSystemVersion</key><string>13.5</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
@@ -47,13 +40,13 @@ mkdir -p "$OUTPUT"
 ditto "$DEST" "$OUTPUT/BMW Import.app"
 xattr -cr "$OUTPUT/BMW Import.app"
 codesign --verify --deep --strict "$OUTPUT/BMW Import.app"
-ditto -c -k --sequesterRsrc --keepParent "$DEST" "$OUTPUT/BMW-Import-0.4.1-Apple-Silicon.zip"
+ditto -c -k --sequesterRsrc --keepParent "$DEST" "$OUTPUT/BMW-Import-0.5.0-Apple-Silicon.zip"
 if [[ "${BMW_PERSONAL_BUILD:-0}" != "1" ]]; then
  mkdir -p "$BUILD_ROOT/payload/Applications"
  ditto "$DEST" "$BUILD_ROOT/payload/Applications/BMW Import.app"
  pkgbuild --analyze --root "$BUILD_ROOT/payload" "$BUILD_ROOT/components.plist"
  /usr/libexec/PlistBuddy -c "Add :0:BundleIsRelocatable bool false" "$BUILD_ROOT/components.plist"
- pkgbuild --root "$BUILD_ROOT/payload" --component-plist "$BUILD_ROOT/components.plist" --identifier local.bmwimport.installer --version 0.4.1 --install-location / "$BUILD_ROOT/component.pkg"
+ pkgbuild --root "$BUILD_ROOT/payload" --component-plist "$BUILD_ROOT/components.plist" --identifier local.bmwimport.installer --version 0.5.0 --install-location / "$BUILD_ROOT/component.pkg"
  cat > "$BUILD_ROOT/distribution.xml" <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
@@ -63,9 +56,9 @@ if [[ "${BMW_PERSONAL_BUILD:-0}" != "1" ]]; then
 <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
 <choices-outline><line choice="default"/></choices-outline>
 <choice id="default" visible="false"><pkg-ref id="local.bmwimport.installer"/></choice>
-<pkg-ref id="local.bmwimport.installer" version="0.4.1" onConclusion="none">component.pkg</pkg-ref>
+<pkg-ref id="local.bmwimport.installer" version="0.5.0" onConclusion="none">component.pkg</pkg-ref>
 </installer-gui-script>
 XML
- productbuild --distribution "$BUILD_ROOT/distribution.xml" --package-path "$BUILD_ROOT" "$OUTPUT/BMW-Import-0.4.1-Apple-Silicon.pkg"
+ productbuild --distribution "$BUILD_ROOT/distribution.xml" --package-path "$BUILD_ROOT" "$OUTPUT/BMW-Import-0.5.0-Apple-Silicon.pkg"
 fi
 printf 'Built: %s\n' "$OUTPUT"

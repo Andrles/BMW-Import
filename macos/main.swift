@@ -1,12 +1,15 @@
 import Cocoa
 import WebKit
+import UniformTypeIdentifiers
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, NSSharingServicePickerDelegate {
     var window: NSWindow!
     var web: WKWebView!
     var server: Process?
     var timer: Timer?
     var attempts = 0
+    var sharePicker: NSSharingServicePicker?
+    var requestedChannel = ""
     let base = URL(string: "http://127.0.0.1:18765")!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -27,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSApp.mainMenu = menu
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "printQuote")
+        config.userContentController.add(self, name: "shareQuote")
         config.userContentController.addUserScript(WKUserScript(source: "window.print = function(){window.webkit.messageHandlers.printQuote.postMessage('print');};", injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
@@ -82,7 +86,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
     }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        if message.frameInfo.isMainFrame && message.frameInfo.request.url?.host == "127.0.0.1" { printPage() }
+        guard message.frameInfo.isMainFrame, let origin = message.frameInfo.request.url,
+              origin.scheme == "http", origin.host == "127.0.0.1", origin.port == 18765 else { return }
+        if message.name == "printQuote" { printPage(); return }
+        guard message.name == "shareQuote", let payload = message.body as? [String: String],
+              let raw = payload["dataURL"], raw.hasPrefix("data:image/png;base64,"), raw.count < 30_000_000,
+              let data = Data(base64Encoded: String(raw.dropFirst("data:image/png;base64,".count))),
+              NSImage(data: data) != nil else { return }
+        let action = payload["action"] ?? "save"
+        guard ["save", "system", "telegram", "whatsapp", "max", "email"].contains(action) else { return }
+        let filename = URL(fileURLWithPath: payload["filename"] ?? "BMW-Import.png").lastPathComponent
+        if action == "save" {
+            let panel = NSSavePanel(); panel.allowedContentTypes = [.png]; panel.nameFieldStringValue = filename
+            panel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = panel.url else { return }
+                do { try data.write(to: url, options: .atomic) } catch { self.shareError(error.localizedDescription) }
+            }
+        } else {
+            do {
+                let directory = FileManager.default.temporaryDirectory.appendingPathComponent("BMW-Import-" + UUID().uuidString, isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let url = directory.appendingPathComponent(filename)
+                try data.write(to: url, options: .atomic)
+                requestedChannel = action
+                sharePicker = NSSharingServicePicker(items: [url])
+                sharePicker?.delegate = self
+                sharePicker?.show(relativeTo: NSRect(x: web.bounds.midX, y: web.bounds.maxY - 100, width: 1, height: 1), of: web, preferredEdge: .minY)
+            } catch { shareError(error.localizedDescription) }
+        }
+    }
+    func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, sharingServicesForItems items: [Any], proposedSharingServices proposedServices: [NSSharingService]) -> [NSSharingService] {
+        let keywords = requestedChannel == "email" ? ["mail", "почта"] : [requestedChannel]
+        let matches = proposedServices.filter { service in keywords.contains { service.title.lowercased().contains($0) } }
+        return matches.isEmpty ? proposedServices : matches
+    }
+    func shareError(_ message: String) {
+        let alert = NSAlert(); alert.messageText = "Не удалось подготовить изображение"; alert.informativeText = message
+        alert.beginSheetModal(for: window)
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
