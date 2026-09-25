@@ -4,19 +4,19 @@
 
 **Локальный калькулятор стоимости BMW из Китая в Россию.** Покупка в юанях, таможенные платежи, доставка и предложение клиенту — в одном приложении.
 
-![macOS](https://img.shields.io/badge/macOS-13.5%2B-172239) ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-2363e8) ![Version](https://img.shields.io/badge/version-0.4.1-24765a)
+![macOS](https://img.shields.io/badge/macOS-13.5%2B-172239) ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-2363e8) ![Version](https://img.shields.io/badge/version-0.5.0-24765a)
 
-[Скачать установщик](https://github.com/Andrles/BMW-Import/releases/download/v0.4.1/BMW-Import-0.4.1-Apple-Silicon.pkg) · [Все релизы](https://github.com/Andrles/BMW-Import/releases) · [Сообщить об ошибке](https://github.com/Andrles/BMW-Import/issues)
+[Скачать установщик](https://github.com/Andrles/BMW-Import/releases/download/v0.5.0/BMW-Import-0.5.0-Apple-Silicon.pkg) · [Все релизы](https://github.com/Andrles/BMW-Import/releases) · [Сообщить об ошибке](https://github.com/Andrles/BMW-Import/issues)
 
 ## Быстрая установка через терминал
 
 Для **Mac с Apple Silicon, macOS 13.5 или новее**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Andrles/BMW-Import/v0.4.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Andrles/BMW-Import/v0.5.0/install.sh | bash
 ```
 
-Скрипт скачивает фиксированную версию 0.4.1, проверяет SHA-256, затем запрашивает пароль администратора для установки в `/Applications`. Node.js уже входит в приложение. Закройте запущенный BMW Import перед обновлением.
+Скрипт скачивает фиксированную версию 0.5.0, проверяет SHA-256, затем запрашивает пароль администратора для установки в `/Applications`. Node.js уже входит в приложение. Закройте запущенный BMW Import перед обновлением.
 
 Хотите сначала посмотреть скрипт? [Открыть install.sh](install.sh). Установщик не подписан сертификатом Developer ID и не заверен Apple: macOS может запросить ручное разрешение запуска. Скрипт не отключает Gatekeeper и не меняет настройки безопасности.
 
@@ -30,6 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/Andrles/BMW-Import/v0.4.1/install.s
 - Бензин, дизель и электро; для электро отдельно указывается 30-минутная мощность.
 - Конвертация кВт ↔ л.с.; нулевые расходы при очистке полей.
 - Предложение клиенту, печать/PDF, сохранение и восстановление удалённых отчётов.
+- «Поделиться»: полная PNG-карточка сохранённого предложения, предпросмотр и сохранение изображения. Telegram, WhatsApp, MAX и Email через доступные службы macOS; если нужного расширения нет, приложите сохранённый PNG вручную.
 
 ## Расчётная область
 
@@ -56,7 +57,7 @@ npm start
 Откройте `http://127.0.0.1:8765`. Сервер слушает только localhost.
 
 ```bash
-npm test          # 22 теста расчётов и преобразований
+npm test          # 25 тестов расчётов и преобразований
 npm run build:mac # .app, .pkg, .zip в dist/
 ```
 
