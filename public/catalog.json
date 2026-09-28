@@ -960,5 +960,53 @@
       "cell": "C16",
       "importedAt": "2026-09-28"
     }
+  },
+  {
+    "id": "x2-u10-s25",
+    "name": "X2 sDrive25i",
+    "family": "X2",
+    "body": "U10",
+    "year": 2023,
+    "productionFrom": "2023-11",
+    "type": "petrol",
+    "cc": 1998,
+    "kw": 150,
+    "hp": 204,
+    "vehicleType": "suv",
+    "drive": "fwd",
+    "source": "https://www.bmw.com.cn/content/dam/bmw/marketCN/bmw_com_cn/specsheet/U10.pdf.asset.1733825731514.pdf",
+    "note": "Китайский рынок · U10 · производство с 2023-11. 204 л.с., 150 кВт; передний привод. Производство Германия. Не использовать для предыдущего поколения F39."
+  },
+  {
+    "id": "x2-u10-x25",
+    "name": "X2 xDrive25i",
+    "family": "X2",
+    "body": "U10",
+    "year": 2023,
+    "productionFrom": "2023-11",
+    "type": "petrol",
+    "cc": 1998,
+    "kw": 150,
+    "hp": 204,
+    "vehicleType": "suv",
+    "drive": "awd",
+    "source": "https://www.bmw.com.cn/content/dam/bmw/marketCN/bmw_com_cn/specsheet/U10.pdf.asset.1733825731514.pdf",
+    "note": "Китайский рынок · U10 · производство с 2023-11. 204 л.с., 150 кВт; полный привод. Производство Германия. Не использовать для предыдущего поколения F39."
+  },
+  {
+    "id": "x2-u10-m35",
+    "name": "X2 M35i xDrive",
+    "family": "X2",
+    "body": "U10",
+    "year": 2024,
+    "productionFrom": "2024-03",
+    "type": "petrol",
+    "cc": 1998,
+    "kw": 221,
+    "hp": 300,
+    "vehicleType": "suv",
+    "drive": "awd",
+    "source": "https://www.bmw.com.cn/content/dam/bmw/marketCN/bmw_com_cn/specsheet/X2M35i.pdf.asset.1733825734796.pdf",
+    "note": "Китайский рынок · U10 · производство с 2024-03. 300 л.с., 221 кВт; полный привод. Производство Германия. Не использовать для предыдущего поколения F39."
   }
 ]
