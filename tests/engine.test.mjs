@@ -53,3 +53,10 @@ test('empty optional expenses default to zero; negative and invalid expenses sti
  }
  for(const k of keys)for(const value of ['-1','oops'])assert.throws(()=>calculate({...base,...zero,[k]:value},rates));
 });
+test('electric excise derives only from 30-minute kW, ignoring missing or stale hp',()=>{
+ const input={...base,type:'electric',kw:'85',hp:''};
+ const result=calculate(input,rates);
+ assert.equal(result.excise,7396.48);
+ for(const hp of [undefined,'400','0','invalid'])assert.equal(calculate({...input,hp},rates).total,result.total);
+ assert.notEqual(calculate({...input,kw:'105'},rates).excise,result.excise);
+});
