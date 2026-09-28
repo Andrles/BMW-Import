@@ -24,8 +24,8 @@ cat > "$DEST/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>BMW Import</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.5.1</string>
-<key>CFBundleVersion</key><string>8</string>
+<key>CFBundleShortVersionString</key><string>0.5.2</string>
+<key>CFBundleVersion</key><string>9</string>
 <key>LSMinimumSystemVersion</key><string>13.5</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
@@ -40,13 +40,13 @@ mkdir -p "$OUTPUT"
 ditto "$DEST" "$OUTPUT/BMW Import.app"
 xattr -cr "$OUTPUT/BMW Import.app"
 codesign --verify --deep --strict "$OUTPUT/BMW Import.app"
-ditto -c -k --sequesterRsrc --keepParent "$DEST" "$OUTPUT/BMW-Import-0.5.1-Apple-Silicon.zip"
+ditto -c -k --sequesterRsrc --keepParent "$DEST" "$OUTPUT/BMW-Import-0.5.2-Apple-Silicon.zip"
 if [[ "${BMW_PERSONAL_BUILD:-0}" != "1" ]]; then
  mkdir -p "$BUILD_ROOT/payload/Applications"
  ditto "$DEST" "$BUILD_ROOT/payload/Applications/BMW Import.app"
  pkgbuild --analyze --root "$BUILD_ROOT/payload" "$BUILD_ROOT/components.plist"
  /usr/libexec/PlistBuddy -c "Add :0:BundleIsRelocatable bool false" "$BUILD_ROOT/components.plist"
- pkgbuild --root "$BUILD_ROOT/payload" --component-plist "$BUILD_ROOT/components.plist" --identifier local.bmwimport.installer --version 0.5.1 --install-location / "$BUILD_ROOT/component.pkg"
+ pkgbuild --root "$BUILD_ROOT/payload" --component-plist "$BUILD_ROOT/components.plist" --identifier local.bmwimport.installer --version 0.5.2 --install-location / "$BUILD_ROOT/component.pkg"
  cat > "$BUILD_ROOT/distribution.xml" <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
@@ -56,9 +56,9 @@ if [[ "${BMW_PERSONAL_BUILD:-0}" != "1" ]]; then
 <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
 <choices-outline><line choice="default"/></choices-outline>
 <choice id="default" visible="false"><pkg-ref id="local.bmwimport.installer"/></choice>
-<pkg-ref id="local.bmwimport.installer" version="0.5.1" onConclusion="none">component.pkg</pkg-ref>
+<pkg-ref id="local.bmwimport.installer" version="0.5.2" onConclusion="none">component.pkg</pkg-ref>
 </installer-gui-script>
 XML
- productbuild --distribution "$BUILD_ROOT/distribution.xml" --package-path "$BUILD_ROOT" "$OUTPUT/BMW-Import-0.5.1-Apple-Silicon.pkg"
+ productbuild --distribution "$BUILD_ROOT/distribution.xml" --package-path "$BUILD_ROOT" "$OUTPUT/BMW-Import-0.5.2-Apple-Silicon.pkg"
 fi
 printf 'Built: %s\n' "$OUTPUT"
