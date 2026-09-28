@@ -4,19 +4,19 @@
 
 **Локальный калькулятор стоимости BMW из Китая в Россию.** Покупка в юанях, таможенные платежи, доставка и предложение клиенту — в одном приложении.
 
-![macOS](https://img.shields.io/badge/macOS-13.5%2B-172239) ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-2363e8) ![Version](https://img.shields.io/badge/version-0.5.1-24765a)
+![macOS](https://img.shields.io/badge/macOS-13.5%2B-172239) ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-2363e8) ![Version](https://img.shields.io/badge/version-0.5.2-24765a)
 
-[Скачать установщик](https://github.com/Andrles/BMW-Import/releases/download/v0.5.1/BMW-Import-0.5.1-Apple-Silicon.pkg) · [Все релизы](https://github.com/Andrles/BMW-Import/releases) · [Сообщить об ошибке](https://github.com/Andrles/BMW-Import/issues)
+[Скачать установщик](https://github.com/Andrles/BMW-Import/releases/download/v0.5.2/BMW-Import-0.5.2-Apple-Silicon.pkg) · [Все релизы](https://github.com/Andrles/BMW-Import/releases) · [Сообщить об ошибке](https://github.com/Andrles/BMW-Import/issues)
 
 ## Быстрая установка через терминал
 
 Для **Mac с Apple Silicon, macOS 13.5 или новее**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Andrles/BMW-Import/v0.5.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Andrles/BMW-Import/v0.5.2/install.sh | bash
 ```
 
-Скрипт скачивает фиксированную версию 0.5.1, проверяет SHA-256, затем запрашивает пароль администратора для установки в `/Applications`. Node.js уже входит в приложение. Закройте запущенный BMW Import перед обновлением.
+Скрипт скачивает фиксированную версию 0.5.2, проверяет SHA-256, затем запрашивает пароль администратора для установки в `/Applications`. Node.js уже входит в приложение. Закройте запущенный BMW Import перед обновлением.
 
 Хотите сначала посмотреть скрипт? [Открыть install.sh](install.sh). Установщик не подписан сертификатом Developer ID и не заверен Apple: macOS может запросить ручное разрешение запуска. Скрипт не отключает Gatekeeper и не меняет настройки безопасности.
 
@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/Andrles/BMW-Import/v0.5.1/install.s
 - Покупка в CNY; официальный курс ЦБ или курс покупки вручную.
 - Раздельные базы покупки и таможенной стоимости.
 - Пошлина, акциз, ввозной НДС, таможенный и утилизационный сборы.
-- Бензин, дизель и электро; для электро отдельно указывается 30-минутная мощность.
+- Бензин, дизель и электро; для электро 30-минутная мощность из каталога используется для утильсбора и акциза.
 - Конвертация кВт ↔ л.с.; нулевые расходы при очистке полей.
 - Предложение клиенту, печать/PDF, сохранение и восстановление удалённых отчётов.
 - «Изображение»: полная PNG-карточка сохранённого предложения, предпросмотр и сохранение изображения. Telegram, WhatsApp, MAX и Email через доступные службы macOS; если нужного расширения нет, приложите сохранённый PNG вручную.
