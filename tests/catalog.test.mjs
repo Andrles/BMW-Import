@@ -24,3 +24,9 @@ test('selection fills power and clears previous values when the next model is un
  $('kw').value='181';context.chooseModel('i4-m50');assert.equal($('kw').value,'');
  context.chooseModel('i3-35');assert.equal($('kw').value,85);
 });
+
+test('Chinese X2 U10 variants preserve documented power and drivetrain',()=>{
+ for(const [id,kw,hp,drive] of [['s25',150,204,'fwd'],['x25',150,204,'awd'],['m35',221,300,'awd']]){
+ const m=catalog.find(m=>m.id==='x2-u10-'+id);assert.ok(m);assert.equal(m.cc,1998);assert.equal(m.kw,kw);assert.equal(m.hp,hp);assert.equal(m.drive,drive);assert.equal(m.type,'petrol');assert.equal(m.body,'U10');
+ }
+});
