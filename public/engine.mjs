@@ -1,3 +1,4 @@
+import {convertPower} from './power.mjs';
 import {offroadState} from './vehicle.mjs';
 export class CalculationError extends Error {}
 const fail = message => { throw new CalculationError(message); };
@@ -47,7 +48,7 @@ export function calculate(i,rates,{preview=false}={}){
  const price=number(i.price,'Цена автомобиля',{positive:true}),buyRate=number(i.buyRate,'Курс покупки CNY',{positive:true}),cny=number(i.cny,'Курс ЦБ CNY',{positive:true});
  if(!i.rateDate)fail('Укажите дату официального курса.');date(i.rateDate,'дату курса');
  if(i.rateDate>i.calcDate)fail('Дата официального курса позже даты расчёта.');
- const kw=number(i.kw,'Мощность для утильсбора, кВт',{positive:true}),hp=number(i.hp,'Мощность для акциза, л. с.',{positive:true});
+ const kw=number(i.kw,'Мощность для утильсбора, кВт',{positive:true}),hp=i.type==='electric'?Number(convertPower(kw,'kw')):number(i.hp,'Мощность для акциза, л. с.',{positive:true});
  if(!i.confirmSpecs&&!preview)fail('Перед сохранением или формированием предложения подтвердите сверку характеристик с документами.');
  const cc=i.type==='electric'?0:number(i.cc,'Объём двигателя',{positive:true,integer:true});
  const pre=number(String(i.preBorder??'').trim()||'0','Доставка и страхование до границы'),post=number(String(i.postBorder??'').trim()||'0','Доставка по России'),docs=number(String(i.documents??'').trim()||'0','Оформление и брокер'),other=number(String(i.other??'').trim()||'0','Прочие расходы'),service=number(String(i.service??'').trim()||'0','Услуги компании');
