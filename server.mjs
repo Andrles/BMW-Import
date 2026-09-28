@@ -38,7 +38,7 @@ const server=http.createServer(async(req,res)=>{
   if(!expected.has(req.headers.host)){send(res,403,{error:'Недопустимый адрес.'});return;}
   if(req.headers.origin&&!expected.has(new URL(req.headers.origin).host)){send(res,403,{error:'Недопустимый источник.'});return;}
   const u=new URL(req.url,`http://${host}:${port}`);
-  if(u.pathname==='/api/health'){send(res,200,{app:'bmw-import',version:'0.1.0'});return;}
+  if(u.pathname==='/api/health'){send(res,200,{app:'bmw-import',version:'0.5.1'});return;}
   if(u.pathname==='/api/rates'&&req.method==='GET'){
    const date=u.searchParams.get('date')||new Date().toISOString().slice(0,10);
    if(!isoDate(date)){send(res,400,{error:'Некорректная дата курса.'});return;}

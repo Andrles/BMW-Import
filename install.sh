@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 # Pinned release; download and verify before asking for administrator access.
-VERSION="0.5.0"
+VERSION="0.5.1"
 ASSET="BMW-Import-${VERSION}-Apple-Silicon.pkg"
-SHA256="428f65af5413753e8d0b9d53d3663bf91a6644a059a7df1c06c7dafbf24e9fe0"
+SHA256="0d09b5a4c8763aa6b7608a47b154d9c41fb8654afab7747d4298ff472c4da896"
 URL="https://github.com/Andrles/BMW-Import/releases/download/v${VERSION}/${ASSET}"
 [[ "$(uname -s)" == "Darwin" ]] || { echo "Requires macOS." >&2; exit 1; }
 [[ "$(uname -m)" == "arm64" ]] || { echo "Requires Apple Silicon. On Apple Silicon, run Terminal without Rosetta." >&2; exit 1; }
