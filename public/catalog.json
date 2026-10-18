@@ -1008,5 +1008,21 @@
     "drive": "awd",
     "source": "https://www.bmw.com.cn/content/dam/bmw/marketCN/bmw_com_cn/specsheet/X2M35i.pdf.asset.1733825734796.pdf",
     "note": "Китайский рынок · U10 · производство с 2024-03. 300 л.с., 221 кВт; полный привод. Производство Германия. Не использовать для предыдущего поколения F39."
+  },
+  {
+    "id": "x1-u12-m35li",
+    "name": "X1 M35Li",
+    "family": "X1",
+    "body": "U12",
+    "year": 2024,
+    "productionFrom": "2024-09",
+    "type": "petrol",
+    "cc": 1998,
+    "kw": 221,
+    "hp": 300,
+    "vehicleType": "suv",
+    "drive": "awd",
+    "source": "https://bmw-digitalprod2.bmw.com.cn/content/dam/bmw/marketCN/bmw_com_cn/specsheet/X1M35Li.pdf.asset.1743996410367.pdf",
+    "note": "Китайский рынок. Технический лист BMW: 221 кВт / 300 л.с., 1998 см³; применим с сентября 2024. Параметры конкретного автомобиля сверяйте с документами."
   }
 ]

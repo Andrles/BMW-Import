@@ -21,6 +21,8 @@ export function fieldForError(message, input = {}) {
   ];
   const label = labels.find(([text]) => message.includes(text));
   if (label) return label[1];
+  if(/точную дату|Точная дата|возрастной границе/.test(message))return 'productionExact';
+  if(/Подтвердите действующие/.test(message))return 'rateConfirmed';
   if (/изготовления|с 2020 года/i.test(message)) return input.productionDate || input.productionMonth ? 'productionYear' : 'productionMonth';
   if (/дат[ау] (официального )?курса/i.test(message)) return 'rateDate';
   if (/гибридной установки/.test(message)) return input.model === 'custom' ? 'type' : 'model';

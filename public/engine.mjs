@@ -1,3 +1,5 @@
+import {rateReadiness} from './currency-state.mjs';
+import {resolveProductionDate,validateModelProduction} from './validation.mjs';
 import {convertPower} from './power.mjs';
 import {offroadState} from './vehicle.mjs';
 export class CalculationError extends Error {}
@@ -44,6 +46,11 @@ export function calculate(i,rates,{preview=false}={}){
  const mild48=i.type==='mild48';
  if(mild48)i={...i,type:'petrol'};
  if(!i.calcDate||i.calcDate<rates.validFrom||i.calcDate>rates.validTo)fail('В этой версии проверены ставки только на 2026 год. Обновите таблицы для другой даты.');
+ if(i.productionPrecision==='month'){
+ const resolved=resolveProductionDate(String(i.productionDate).slice(0,7),'',i.calcDate,{type:i.type,model:i});if(!resolved.valid)fail(resolved.error);
+ }
+ const modelDate=validateModelProduction(i,i.productionDate);if(!modelDate.valid)fail(modelDate.error);
+ if(i.rateState!==undefined&&!preview&&!rateReadiness(i).ready)fail('Подтвердите действующие официальные курсы на дату расчёта.');
  const age=ages(i.productionDate,i.calcDate);
  const price=number(i.price,'Цена автомобиля',{positive:true}),buyRate=number(i.buyRate,'Курс покупки CNY',{positive:true}),cny=number(i.cny,'Курс ЦБ CNY',{positive:true});
  if(!i.rateDate)fail('Укажите дату официального курса.');date(i.rateDate,'дату курса');
@@ -70,7 +77,8 @@ export function calculate(i,rates,{preview=false}={}){
  if(classification.needsReview)warnings.push('Повышенная проходимость не подтверждена: предварительно применена обычная ставка. Уточните характеристики ЕТТ.');
  if(mild48)warnings.push('48V: бензиновая схема расчёта по настройке пользователя; классификация по документам не проверена.');
  if(!i.confirmSpecs)warnings.push('Предварительная сумма. Для сохранения и предложения клиенту подтвердите сверку характеристик с документами.');
- if(i.rateDate!==i.calcDate)warnings.push(`Курс на ${i.rateDate}; проверьте, что он действует на дату расчёта.`);
+ if(i.rateState!==undefined&&!rateReadiness(i).ready)warnings.push('Официальные курсы требуют проверки. Обновите их или подтвердите ручной ввод.');
+ if(i.rateDate!==i.calcDate&&!(i.rateState!==undefined&&rateReadiness(i).ready))warnings.push(`Курс на ${i.rateDate}; проверьте, что он действует на дату расчёта.`);
  if(i.customsOverride?.trim())warnings.push('Таможенная стоимость задана вручную.');
  if(i.productionDate===`${Number(i.calcDate.slice(0,4))-3}${i.calcDate.slice(4)}`)warnings.push('Граница 3 лет: пошлина для бывшего в эксплуатации, утильсбор — не старше 3 лет.');
  return {rows,total,customs,duty,excise,exciseRate,vat,fee,util,coefficient,rule,age,utilKw,bandLabel:band.label,version:rates.version,rateDate:i.rateDate,warnings};

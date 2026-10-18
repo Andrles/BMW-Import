@@ -1,6 +1,6 @@
 {
   "name": "bmw-import",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "private": true,
   "description": "Local BMW import cost calculator for China to Russia",
   "type": "module",

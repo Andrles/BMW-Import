@@ -1,6 +1,10 @@
+import {sortCatalog} from './catalog-order.mjs';
+import {APP_VERSION,CATALOG_VERSION} from './version.mjs';
+import {resolveProductionDate,productionMonthState} from './validation.mjs';
+import {rateReadiness,needsRateRefresh,tariffReminder} from './currency-state.mjs';
 import {fieldForError, sameQuote} from './workflow.mjs';
 import {renderShareImage,proposalHTML} from './share.mjs';
-import {convertPower} from './power.mjs';
+import {convertPower,powerProvenance} from './power.mjs';
 import {calculate,ages} from './engine.mjs';
 import {offroadState} from './vehicle.mjs';
 const $=id=>document.getElementById(id);
@@ -12,13 +16,24 @@ const fuel={petrol:'Бензин',diesel:'Дизель',electric:'Электро
 const catalogPower=m=>m.type==='electric'?(m.kw?`${m.kw} кВт · 30 мин`:m.peak?`${m.peak} кВт пик`:'Мощность по документам'):`${m.hp} л.с.`;
 const expenseFields=['preBorder','postBorder','documents','other','service'];
 const todayDate=()=>new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Europe/Moscow'}).format(new Date());
-const fields=['vehicleType','drive','clearance','ettStatus','productionPrecision','powerLinked','model','customName','productionDate','calcDate','type','cc','kw','hp','confirmSpecs','offroad','price','buyRate','buyMode','cny','eur','rateDate','rateSource','preBorder','postBorder','documents','other','service','customsOverride'];
+const fields=['vehicleType','drive','clearance','ettStatus','productionPrecision','powerLinked','model','customName','productionDate','calcDate','type','cc','kw','hp','confirmSpecs','offroad','price','buyRate','buyMode','cny','eur','rateDate','rateSource','rateCheckedDate','rateFetchedAt','rateState','rateConfirmed','preBorder','postBorder','documents','other','service','customsOverride'];
 let catalog=[],rates,company={},quotes=[],result=null,busy=false,rateRequest=0,view='calculator';
-let toastTimer;
+let toastTimer, rateLoading=false, historyWarnings=[];
 let showTrash=false;
 let demoDraft=null, demoVehicleDrafts=null, invalidField=null;
 const vehicleFields=['vehicleType','drive','clearance','ettStatus','productionPrecision','model','customName','productionDate','type','cc','kw','hp','powerLinked','confirmSpecs','offroad'];
 const vehicleDrafts={};
+function enhanceUI(){
+ document.querySelectorAll('.section-title .step').forEach(e=>e.remove());
+ $('catalogMode').textContent='Каталог BMW';$('manualMode').textContent='Ввести вручную';
+ const modelLabel=$('model').closest('label');modelLabel.classList.add('model-native');
+ const results=document.createElement('div');results.id='modelResults';results.className='model-results hidden';results.setAttribute('role','listbox');results.setAttribute('aria-label','Найденные модели');modelLabel.after(results);
+ const selection=document.createElement('div');selection.id='modelSelection';selection.className='model-selection';selection.setAttribute('aria-live','polite');results.after(selection);
+ $('modelSearch').setAttribute('aria-controls','modelResults');$('modelSearch').setAttribute('aria-expanded','false');$('modelSearch').placeholder='Начните вводить: X5, i4, 330…';
+ const resultTop=document.querySelector('.result-top');resultTop.insertAdjacentHTML('afterend','<div class="result-vehicle"><strong id="resultVehicleName">Автомобиль не выбран</strong><span id="resultVehicleMeta">Укажите модель и месяц выпуска</span></div>');
+ $('resultMessage').insertAdjacentHTML('afterend','<section id="readiness" class="readiness"><div class="readiness-head"><strong>Готовность предложения</strong><span id="readinessCount">0 / 3</span></div><div id="readinessItems"></div></section>');
+ document.body.insertAdjacentHTML('beforeend','<button id="mobileTotalBar" class="mobile-total-bar" type="button"><span>Итог для клиента</span><strong id="mobileTotal">—</strong></button>');
+}
 function entryMode(custom){
  const current=$('model').value==='custom';
  if(current===custom)return;
@@ -26,14 +41,42 @@ function entryMode(custom){
  const saved=vehicleDrafts[custom?'manual':'catalog'];
  if(saved)fill(saved);else chooseModel(custom?'custom':catalog[0].id);
  if(custom)document.querySelector('.spec-details').open=true;
- (custom?$('customName'):$('model')).focus();
+ (custom?$('customName'):$('modelSearch')).focus();
 }
 function toast(s){$('toast').textContent=s;$('toast').classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),4500);}
 async function api(url,options){const r=await fetch(url,options);const b=await r.json();if(!r.ok)throw Error(b.error||'Не удалось выполнить действие.');return b;}
 const post=(url,b)=>api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
-function collect(){const i={};for(const id of fields)i[id]=$(id).type==='checkbox'?$(id).checked:$(id).value;const m=catalog.find(c=>c.id===i.model);i.vehicleName=i.model==='custom'?(i.customName.trim()||'BMW — ручной ввод'):`BMW ${m?.name||''}`;i.body=m?.body||'';i.catalogSource=m?.source||'';return i;}
-function syncDateControls(){const [y,m]=($('productionDate').value||'').split('-');$('productionYear').value=y||'';$('productionMonth').value=m||'';}
-function writeProductionDate(){const y=$('productionYear').value,m=$('productionMonth').value;$('productionPrecision').value='month';$('productionDate').value=y&&m?y+'-'+m+'-15':'';}
+function collect(){const i={};for(const id of fields)i[id]=$(id).type==='checkbox'?$(id).checked:$(id).value;const m=catalog.find(c=>c.id===i.model);i.vehicleName=i.model==='custom'?(i.customName.trim()||'BMW — ручной ввод'):`BMW ${m?.name||''}`;i.body=m?.body||'';i.catalogSource=m?.source||'';i.power30Source=powerProvenance(m,i);i.catalogVersion=CATALOG_VERSION;i.appVersion=APP_VERSION;i.productionFrom=m?.productionFrom||'';i.productionTo=m?.productionTo||'';return i;}
+function syncDateControls(){const [y,m]=($('productionDate').value||'').split('-');$('productionYear').value=y||'';$('productionMonth').value=m||'';$('productionExact').value=$('productionPrecision').value==='day'?$('productionDate').value:'';}
+function productionState(){
+ const month=[$('productionYear').value,$('productionMonth').value].join('-');
+ return resolveProductionDate(month,$('productionExact').value,$('calcDate').value,{type:$('type').value,model:catalog.find(m=>m.id===$('model').value)});
+}
+function writeProductionDate(){
+ const y=$('productionYear').value,m=$('productionMonth').value;
+ $('productionPrecision').value=$('productionExact').value?'day':'month';
+ $('productionDate').value=$('productionExact').value||(y&&m?y+'-'+m+'-01':'');
+}
+function dateBoundaryUI(){
+ const month=[$('productionYear').value,$('productionMonth').value].join('-');
+ const state=productionMonthState(month,$('calcDate').value,{type:$('type').value});
+ $('productionExactWrap').classList.toggle('hidden',!state.needsExactDay&&!$('productionExact').value);
+ if(state.valid){$('productionExact').min=state.firstDate;$('productionExact').max=state.lastDate;}
+ $('productionDateHelp').textContent='В этом месяце меняется возрастная категория. Уточните день по документам перед сохранением.';
+ return state;
+}
+function rateStatusUI(){
+ const i=collect(),r=rateReadiness(i);
+ $('rateConfirmWrap').classList.toggle('hidden',r.automatic&&r.checked);
+ if(rateLoading){$('rateStatus').textContent='Проверяем CNY и EUR…';return;}
+ const status=i.rateState==='manual'?'Введён вручную':r.checked&&i.rateState==='cbr'?'Проверен сегодня':i.rateState==='cache'?'Сохранённый курс':'Нужна проверка курса';
+ $('rateStatus').textContent=status+(i.cny?' · 1 ¥ = '+num(Number(i.cny))+' ₽':'');
+ $('rateDetails').textContent=i.rateDate?'Действует с '+dateLabel(i.rateDate)+(i.rateCheckedDate?' · проверен на '+dateLabel(i.rateCheckedDate):'')+(i.rateState==='cache'?' · ЦБ недоступен':''):'Обновите курсы или укажите их вручную';
+}
+async function checkToday(){
+ if(demoDraft||rateLoading)return;
+ const today=todayDate();if($('calcDate').value!==today){$('calcDate').value=today;$('rateConfirmed').checked=false;render();await refreshRate();}
+}
 function fill(input){const m=catalog.find(m=>m.id===input.model);input={vehicleType:m?.vehicleType||'passenger',drive:m?.drive||'unknown',clearance:'',ettStatus:'unknown',productionPrecision:'day',...input};if(input.powerLinked===undefined)input={...input,powerLinked:input.type!=='electric'};if(input.type==='hybrid'&&catalog.find(m=>m.id===input.model)?.type==='mild48')input={...input,type:'mild48'};for(const f of fields)if(input[f]!==undefined){if($(f).type==='checkbox')$(f).checked=!!input[f];else $(f).value=input[f]??'';}$('calcDate').value=todayDate();for(const id of expenseFields)if(!$(id).value.trim())$(id).value='0';syncDateControls();syncVehicle();render();}
 function setView(id){view=id;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==id));document.querySelectorAll('nav button').forEach(e=>{e.classList.toggle('active',e.dataset.view===id);if(e.dataset.view===id)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current');});$('topTitle').textContent=' / '+({calculator:'Новый расчёт',history:'Сохранённые расчёты',catalog:'Каталог BMW',settings:'Настройки'}[id]);if(id==='history')loadHistory();window.scrollTo({top:0});const heading=$(id).querySelector('h1');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}}
 function syncVehicle(){const m=catalog.find(c=>c.id===$('model').value),custom=$('model').value==='custom',type=$('type').value;
@@ -48,6 +91,8 @@ function syncVehicle(){const m=catalog.find(c=>c.id===$('model').value),custom=$
  $('offroadWrap').classList.toggle('hidden',!classification.applicable||$('vehicleType').value!=='suv');
  $('offroadHelp').textContent=classification.qualified?'Повышенная проходимость ЕТТ: применяется автоматически.':classification.needsReview?'Уточните клиренс и остальные условия ЕТТ для точной пошлины.':'Повышенная проходимость ЕТТ: не применяется.';
  $('specSummary').textContent=[fuel[type],type==='electric'?$('kw').value+' кВт':$('cc').value+' см³',$('hp').value+' л.с.'].join(' · ');
+ if($('modelSelection'))$('modelSelection').innerHTML=`<div><strong>${esc(custom?($('customName').value||'BMW — ручной ввод'):`BMW ${m?.name||''}`)}</strong><span>${esc([m?.body,fuel[type],type==='electric'?$('kw').value+' кВт / 30 мин':$('cc').value+' см³',$('hp').value+' л.с.'].filter(Boolean).join(' · '))}</span></div><button type="button" id="changeModel">Изменить</button>`;
+ if($('resultVehicleName')){$('resultVehicleName').textContent=custom?($('customName').value||'BMW — ручной ввод'):`BMW ${m?.name||''}`;$('resultVehicleMeta').textContent=[m?.body,$('productionMonth').selectedOptions[0]?.text,$('productionYear').value,fuel[type]].filter(Boolean).join(' · ');}
  $('heroName').textContent=custom?($('customName').value.replace(/^BMW\s*/i,'')||'Ваш BMW'):m?.name||'BMW';
  $('heroMeta').textContent=custom?'Ручной ввод / по документам':`${m?.family} / ${m?.body}`;
  $('heroFuel').textContent=fuel[type];$('heroPower').textContent=type==='electric'?(m?.peak?`${m.peak} кВт · пиковая`:'Электромобиль'):($('hp').value?`${$('hp').value} л. с.`:'Мощность по документам');
@@ -65,21 +110,56 @@ function showFieldError(message){
  const id=fieldForError(message,{...collect(),productionMonth:$('productionMonth').value});const field=id&&$(id);if(!field)return;
  invalidField=field;field.setAttribute('aria-invalid','true');const error=document.createElement('small');error.id=id+'Error';error.className='field-error';error.textContent=message;field.insertAdjacentElement('afterend',error);field.setAttribute('aria-describedby',[field.getAttribute('aria-describedby'),error.id].filter(Boolean).join(' '));$('goToError').classList.remove('hidden');
 }
-function render(){clearFieldError();syncVehicle();const i=collect();try{if(!demoDraft)localStorage.setItem('bmw-import-draft-v1',JSON.stringify(i));}catch{}
- try{result=calculate(i,rates,{preview:true});$('total').textContent=rub(result.total);const grouped=[['Автомобиль',result.rows.find(r=>r.id==='purchase').amount],['Таможенные платежи',result.duty+result.excise+result.vat+result.fee],['Утилизационный сбор',result.util],['Доставка и услуги',result.rows.filter(r=>['preBorder','postBorder','documents','other','service'].includes(r.id)).reduce((s,r)=>s+r.amount,0)]];$('summaryBreakdown').innerHTML=grouped.map(([label,value])=>'<div class="row"><span>'+label+'</span><b>'+rub(value)+'</b></div>').join('');$('breakdown').innerHTML=result.rows.filter(r=>r.amount||['purchase','duty','excise','vat','fee','util'].includes(r.id)).map(r=>`<div class="row ${r.id}"><span>${esc(r.label)}</span><b>${rub(r.amount)}</b></div>`).join('');$('taxMeta').innerHTML=`Таможенная стоимость: ${rub(result.customs)}<br>ТН ВЭД: ${result.rule.code} · ${esc(rates.tariff[result.rule.code].rateText)}<br>Утильсбор: 20 000 × ${num(result.coefficient)}<br>Акциз: ${num(result.exciseRate)} ₽ / л. с. · НДС: ${rates.vat*100}%`;
+function render(){$('total').classList.remove('total-range');clearFieldError();syncVehicle();const boundary=dateBoundaryUI();rateStatusUI();const i=collect();$('tariffNotice').textContent=tariffReminder(rates,i.calcDate);$('tariffNotice').classList.toggle('hidden',!$('tariffNotice').textContent);try{if(!demoDraft)localStorage.setItem('bmw-import-draft-v1',JSON.stringify(i));}catch{}
+ try{const resolved=productionState();if(!resolved.valid)throw Error(resolved.error);result=calculate(i,rates,{preview:true});$('total').textContent=rub(result.total);const grouped=[['Автомобиль',result.rows.find(r=>r.id==='purchase').amount],['Таможенные платежи',result.duty+result.excise+result.vat+result.fee],['Утилизационный сбор',result.util],['Доставка и услуги',result.rows.filter(r=>['preBorder','postBorder','documents','other','service'].includes(r.id)).reduce((s,r)=>s+r.amount,0)]];$('summaryBreakdown').innerHTML=grouped.map(([label,value])=>'<div class="row"><span>'+label+'</span><b>'+rub(value)+'</b></div>').join('');$('breakdown').innerHTML=result.rows.filter(r=>r.amount||['purchase','duty','excise','vat','fee','util'].includes(r.id)).map(r=>`<div class="row ${r.id}"><span>${esc(r.label)}</span><b>${rub(r.amount)}</b></div>`).join('');$('taxMeta').innerHTML=`Таможенная стоимость: ${rub(result.customs)}<br>ТН ВЭД: ${result.rule.code} · ${esc(rates.tariff[result.rule.code].rateText)}<br>Утильсбор: 20 000 × ${num(result.coefficient)}<br>Акциз: ${num(result.exciseRate)} ₽ / л. с. · НДС: ${rates.vat*100}%`;
  $('resultMessage').textContent=result.warnings.join(' ');$('resultMessage').classList.toggle('hidden',!result.warnings.length);$('resultMessage').classList.toggle('warning',!!result.warnings.length);
- }catch(e){showFieldError(e.message);result=null;$('summaryBreakdown').innerHTML='';$('total').textContent='—';$('breakdown').innerHTML='';$('taxMeta').innerHTML='';$('resultMessage').textContent=e.message;$('resultMessage').classList.remove('hidden','warning');}
- $('reviewSpecs').classList.toggle('hidden',!result||!!i.confirmSpecs);const unresolved=result&&offroadState(i,result.age).needsReview;$('makeQuote').disabled=!result||busy||!!demoDraft||!i.confirmSpecs||unresolved;$('saveQuote').disabled=!result||busy||!!demoDraft||!i.confirmSpecs||unresolved;
+ }catch(e){showFieldError(e.message);result=null;$('summaryBreakdown').innerHTML='';$('total').textContent='—';$('breakdown').innerHTML='';$('taxMeta').innerHTML='';$('resultMessage').textContent=e.message;$('resultMessage').classList.remove('hidden','warning');
+ if(boundary.needsExactDay&&!$('productionExact').value){try{const values=[boundary.firstDate,boundary.lastDate].map(productionDate=>calculate({...i,productionDate,productionPrecision:'day'},rates,{preview:true}).total);$('total').textContent=rub(Math.min(...values))+' — '+rub(Math.max(...values));$('total').classList.add('total-range');}catch{}}
+ }
+ let dateReady=false;try{dateReady=productionState().valid;}catch{}
+ const readiness=[
+  {ok:dateReady,label:'Модель и дата выпуска',target:'productionMonth'},
+  {ok:!!i.confirmSpecs,label:'Характеристики сверены',target:'confirmSpecs'},
+  {ok:rateReadiness(i).ready,label:'Курс ЦБ проверен',target:'refreshRate'}
+ ];
+ $('readinessCount').textContent=`${readiness.filter(x=>x.ok).length} / ${readiness.length}`;$('readinessItems').innerHTML=readiness.map(x=>`<button type="button" class="readiness-item ${x.ok?'done':''}" data-ready-target="${x.target}"><span>${x.ok?'✓':'○'}</span>${x.label}</button>`).join('');
+ $('mobileTotal').textContent=$('total').textContent;
+ $('reviewSpecs').classList.toggle('hidden',!result||!!i.confirmSpecs);const unresolved=result&&offroadState(i,result.age).needsReview;$('makeQuote').disabled=!result||busy||rateLoading||!!demoDraft||!i.confirmSpecs||unresolved||!rateReadiness(i).ready;$('saveQuote').disabled=!result||busy||rateLoading||!!demoDraft||!i.confirmSpecs||unresolved||!rateReadiness(i).ready;
 }
-async function refreshRate(){$('calcDate').value=todayDate();const request=++rateRequest;const requestedDate=$('calcDate').value;$('demo').disabled=true;$('refreshRate').disabled=true;$('refreshCustomsRate').disabled=true;$('refreshCustomsRate').textContent='Обновляем…';$('rateStatus').textContent='Получаем официальный курс…';try{const r=await api('/api/rates?date='+encodeURIComponent(requestedDate));if(request!==rateRequest)return;$('cny').value=r.CNY;$('eur').value=r.EUR;$('rateDate').value=r.date;$('rateSource').value=r.cached?'Банк России · сохранённый курс':'Банк России';if($('buyMode').value==='cbr')$('buyRate').value=r.CNY;$('rateStatus').textContent=`1 ¥ = ${num(r.CNY)} ₽`;$('rateDetails').textContent=`${r.source} · действует с ${dateLabel(r.date)} · проверено на ${dateLabel(r.requestedDate)}${r.cached?' · из кэша':' · получено от ЦБ'}`;if(r.error)toast(r.error);render();}catch(e){if(request!==rateRequest)return;$('rateStatus').textContent='Не удалось обновить курс';$('rateDetails').textContent=$('rateDate').value?`Оставлен курс на ${dateLabel($('rateDate').value)}`:'Введите курс вручную в разделе ниже';$('ratesDetails').open=true;toast(e.message);}finally{if(request===rateRequest){$('demo').disabled=false;$('refreshRate').disabled=false;$('refreshCustomsRate').disabled=false;$('refreshCustomsRate').textContent='↻ Обновить';}}}
-async function loadHistory(){try{quotes=await api('/api/quotes'+(showTrash?'?trash=1':''));$('historyCount').textContent=showTrash?(await api('/api/quotes')).length:quotes.length;$('toggleTrash').textContent=showTrash?'К сохранённым отчётам':'Удалённые отчёты';$('historyList').innerHTML=quotes.length?quotes.map(q=>`<div class="history-item"><div><h3>${esc(q.input.vehicleName)}</h3><small>${dateLabel(q.input.productionDate)}${q.input.productionPrecision==='month'?' (день условный)':''} · расчёт ${dateLabel(q.input.calcDate)} · № ${q.id.slice(0,8).toUpperCase()}</small><div class="history-actions"><button class="button secondary" data-report="${q.id}">Предложение / PDF</button><button class="button secondary" data-copy="${q.id}">Создать копию</button><button class="button secondary" ${showTrash?'data-restore':'data-delete'}="${q.id}">${showTrash?'Восстановить':'Удалить'}</button></div></div><div><div class="amount">${rub(q.result.total)}</div><small>${esc(q.result.version)} · курс ${num(Number(q.input.buyRate))} ₽/¥</small></div></div>`).join(''):`<div class="empty-state"><h2>${showTrash?'Удалённых отчётов нет':'Здесь появятся ваши расчёты'}</h2><p>${showTrash?'Удалённые отчёты можно восстановить в этом разделе.':'Сохраните первое предложение из калькулятора.'}</p></div>`;}catch(e){toast(e.message);}}
-async function save(show){if(!result||busy||demoDraft)return;busy=true;render();try{const input=collect();const saved=await api('/api/quotes');const existing=saved.find(q=>sameQuote(q,input,company,rates));const quote=existing||await post('/api/quotes',{input,company});await loadHistory();toast(existing?'Открыт сохранённый расчёт. Дубликат не создан.':'Расчёт сохранён. Курсы и ставки зафиксированы.');if(show)openQuote(quote);}catch(e){toast(e.message);}finally{busy=false;render();}}
+async function refreshRate(){
+ if(rateLoading)return;rateLoading=true;$('calcDate').value=todayDate();$('rateConfirmed').checked=false;
+ const requestedDate=$('calcDate').value;
+ for(const id of ['demo','refreshRate','refreshCustomsRate'])$(id).disabled=true;
+ render();
+ try{const r=await api('/api/rates?date='+encodeURIComponent(requestedDate));
+ $('cny').value=r.CNY;$('eur').value=r.EUR;$('rateDate').value=r.date;$('rateCheckedDate').value=r.requestedDate;$('rateFetchedAt').value=r.fetchedAt;$('rateState').value=r.cached?'cache':'cbr';$('rateSource').value='Банк России';
+ if($('buyMode').value==='cbr')$('buyRate').value=r.CNY;if(r.error)toast(r.error);
+ }catch(e){$('rateState').value='error';$('ratesDetails').open=true;toast(e.message);}
+ finally{rateLoading=false;for(const id of ['demo','refreshRate','refreshCustomsRate'])$(id).disabled=false;render();}
+}
+function historyRender(){
+ const query=$('historySearch').value.trim().toLocaleLowerCase(),from=$('historyFrom').value,to=$('historyTo').value;
+ const matches=quotes.filter(q=>(!query||`${q.input.vehicleName} ${q.id}`.toLocaleLowerCase().includes(query))&&(!from||q.createdAt.slice(0,10)>=from)&&(!to||q.createdAt.slice(0,10)<=to));
+ $('historyStatus').textContent=`Показано ${matches.length} из ${quotes.length}`+(historyWarnings.length?`. Не удалось прочитать ${historyWarnings.length} записей. Остальные доступны; резервная копия сохранит повреждённые файлы для восстановления.`:'');
+ $('historyList').innerHTML=matches.length?matches.map(q=>`<div class="history-item"><div><h3>${esc(q.input.vehicleName)}</h3><small>${dateLabel(q.input.productionDate)}${q.input.productionPrecision==='month'?' (день условный)':''} · расчёт ${dateLabel(q.input.calcDate)} · № ${q.id.slice(0,8).toUpperCase()}</small><div class="history-actions"><button class="button secondary" data-report="${q.id}">Предложение / PDF</button><button class="button secondary" data-copy="${q.id}">Создать копию</button><button class="button secondary" ${showTrash?'data-restore':'data-delete'}="${q.id}">${showTrash?'Восстановить':'Удалить'}</button></div></div><div><div class="amount">${rub(q.result.total)}</div><small>${esc(q.result.version)} · курс ${num(Number(q.input.buyRate))} ₽/¥</small></div></div>`).join(''):`<div class="empty-state"><h2>${quotes.length?'По запросу ничего не найдено':showTrash?'Удалённых отчётов нет':'Здесь появятся ваши расчёты'}</h2><p>${quotes.length?'Измените модель, номер или диапазон дат.':showTrash?'Удалённые отчёты можно восстановить в этом разделе.':'Сохраните первое предложение из калькулятора.'}</p></div>`;
+}
+async function loadHistory(){try{
+ const suffix=showTrash?'?trash=1':'';
+ [quotes,historyWarnings]=await Promise.all([api('/api/quotes'+suffix),api('/api/history/warnings'+suffix)]);
+ $('historyCount').textContent=showTrash?(await api('/api/quotes')).length:quotes.length;
+ $('toggleTrash').textContent=showTrash?'К сохранённым отчётам':'Удалённые отчёты';historyRender();
+ }catch(e){$('historyStatus').textContent='Историю не удалось загрузить. '+e.message;toast(e.message);}}
+function downloadJSON(value,filename){if(window.webkit?.messageHandlers?.saveBackup){window.webkit.messageHandlers.saveBackup.postMessage({json:JSON.stringify(value),filename});return;}const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}
+async function save(show){if(!result||busy||demoDraft||rateLoading)return;await checkToday();if(!result||!rateReadiness(collect()).ready){$('ratesDetails').open=true;toast('Проверьте официальные курсы перед сохранением.');return;}busy=true;render();try{const input=collect();const saved=await api('/api/quotes');const existing=saved.find(q=>sameQuote(q,input,company,rates));const quote=existing||await post('/api/quotes',{input,company});await loadHistory();toast(existing?'Открыт сохранённый расчёт. Дубликат не создан.':'Расчёт сохранён. Курсы и ставки зафиксированы.');if(show)openQuote(quote);}catch(e){toast(e.message);}finally{busy=false;render();}}
 let openedQuote=null, shareImage=null;
 function openQuote(q){openedQuote=q;$('quotePaper').innerHTML=proposalHTML(q);if(!$('quoteDialog').open)$('quoteDialog').showModal();}
 function catalogRender(){
+ const selected=$('model').value,query=$('modelSearch').value.trim().toLowerCase();const filtered=catalog.filter(m=>`${m.name} ${m.family} ${m.body}`.toLowerCase().includes(query));
  const groups=[...new Set(catalog.map(m=>m.family))];
  $('model').innerHTML=groups.map(g=>`<optgroup label="BMW ${esc(g)}">${catalog.filter(m=>m.family===g).map(m=>`<option value="${m.id}">${esc(m.name)} · ${esc(m.body)} · ${m.year||'Год по документам'} · ${catalogPower(m)}${m.type==='mild48'?' · 48V':''}</option>`).join('')}</optgroup>`).join('')+'<option value="custom">Другой BMW — ввести характеристики</option>';
- catalogFilter();
+ if(selected)$('model').value=selected;
+ if($('modelResults')){$('modelResults').innerHTML=filtered.slice(0,10).map(m=>`<button type="button" role="option" data-model-id="${m.id}"><strong>BMW ${esc(m.name)}</strong><span>${esc(m.body)} · ${esc(catalogPower(m))}</span></button>`).join('');$('modelResults').classList.toggle('hidden',!query);$('modelSearch').setAttribute('aria-expanded',String(!!query));}
+ $('modelSearchStatus').textContent=query?`Найдено: ${filtered.length}${filtered.length>10?' · показаны первые 10':''}`:'';catalogFilter();
 }
 function catalogFilter(){
  const query=$('catalogSearch').value.trim().toLocaleLowerCase(),type=$('catalogFuel').value;
@@ -87,19 +167,19 @@ function catalogFilter(){
  $('catalogCount').textContent=`Показано ${matches.length} из ${catalog.length} модификаций`;
  $('catalogList').innerHTML=matches.length?matches.map(m=>`<article class="card catalog-item"><span class="pill">${fuel[m.type]} · ${m.year||'Год по документам'} · ${catalogPower(m)}${m.type==='hybrid'?' · справочно':''}</span><h3>BMW ${esc(m.name)}</h3><p class="muted">${esc(m.body)} · Китай</p><p class="hint">${esc(m.note)}</p>${m.source?`<a href="${esc(m.source)}" target="_blank" rel="noreferrer">Официальный источник ↗</a>`:''}<button class="button secondary" data-select="${m.id}">${m.type==='hybrid'?'Открыть характеристики':'Рассчитать эту версию'}</button></article>`).join(''):'<div class="empty-state"><h2>Модификации не найдены</h2><p>Измените запрос или выберите другой тип двигателя.</p></div>';
 }
-async function init(){try{[catalog,rates,company]=await Promise.all([api('/catalog.json'),api('/rates.json'),api('/api/settings')]);catalogRender();$('sources').innerHTML=rates.sources.map(s=>`<a class="source-link" href="${s.url}" target="_blank" rel="noreferrer">${esc(s.name)} ↗</a>`).join('');$('companyName').value=company.name||'';$('companyContact').value=company.contact||'';$('companyNote').value=company.note||'';
+async function init(){try{enhanceUI();[catalog,rates,company]=await Promise.all([api('/catalog.json'),api('/rates.json'),api('/api/settings')]);catalog=sortCatalog(catalog);catalogRender();$('sources').innerHTML=rates.sources.map(s=>`<a class="source-link" href="${s.url}" target="_blank" rel="noreferrer">${esc(s.name)} ↗</a>`).join('');$('companyName').value=company.name||'';$('companyContact').value=company.contact||'';$('companyNote').value=company.note||'';
  const today=new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Europe/Moscow'}).format(new Date());$('calcDate').value=today;
  let draft=null;try{draft=JSON.parse(localStorage.getItem('bmw-import-draft-v1'));}catch{}
  if(draft&&([...catalog.map(m=>m.id),'custom'].includes(draft.model))){fill(draft);if(draft.cny){$('rateStatus').textContent=`1 ¥ = ${num(Number(draft.cny))} ₽`;$('rateDetails').textContent=`${draft.rateSource} · ${dateLabel(draft.rateDate)} · из черновика`;}}else chooseModel('325li-2024');
  $('calcForm').addEventListener('submit',e=>e.preventDefault());$('model').addEventListener('change',()=>chooseModel($('model').value));
- $('calcForm').addEventListener('input',e=>{if(expenseFields.includes(e.target.id)&&!e.target.value.trim())e.target.value='0';if(['productionMonth','productionYear'].includes(e.target.id)){writeProductionDate();$('confirmSpecs').checked=false;}if(['vehicleType','drive','clearance','ettStatus'].includes(e.target.id))$('confirmSpecs').checked=false;if(e.target.id==='type')$('powerLinked').checked=$('type').value!=='electric';if(['kw','hp'].includes(e.target.id)&&$('powerLinked').checked){const target=e.target.id==='kw'?'hp':'kw';$(target).value=convertPower(e.target.value,e.target.id);}if(e.target.id==='powerLinked')$('confirmSpecs').checked=false;if(['kw','hp','cc','type','productionDate','customName','offroad'].includes(e.target.id))$('confirmSpecs').checked=false;if(['cny','eur','rateDate'].includes(e.target.id)){$('rateSource').value='Ручной ввод';$('rateStatus').textContent='Официальный курс задан вручную';$('rateDetails').textContent=`Дата: ${dateLabel($('rateDate').value)}`;if($('buyMode').value==='cbr')$('buyRate').value=$('cny').value;}if(e.target.id==='buyMode'&&$('buyMode').value==='cbr')$('buyRate').value=$('cny').value;render();});
+ $('calcForm').addEventListener('input',e=>{if(expenseFields.includes(e.target.id)&&!e.target.value.trim())e.target.value='0';if(['productionMonth','productionYear','productionExact'].includes(e.target.id)){if(e.target.id!=='productionExact')$('productionExact').value='';writeProductionDate();$('confirmSpecs').checked=false;}if(['vehicleType','drive','clearance','ettStatus'].includes(e.target.id))$('confirmSpecs').checked=false;if(e.target.id==='type')$('powerLinked').checked=$('type').value!=='electric';if(['kw','hp'].includes(e.target.id)&&$('powerLinked').checked){const target=e.target.id==='kw'?'hp':'kw';$(target).value=convertPower(e.target.value,e.target.id);}if(e.target.id==='powerLinked')$('confirmSpecs').checked=false;if(['kw','hp','cc','type','productionDate','customName','offroad'].includes(e.target.id))$('confirmSpecs').checked=false;if(['cny','eur','rateDate'].includes(e.target.id)){$('rateState').value='manual';$('rateConfirmed').checked=false;$('rateCheckedDate').value='';$('rateFetchedAt').value='';$('rateSource').value='Ручной ввод';$('rateStatus').textContent='Официальный курс задан вручную';$('rateDetails').textContent=`Дата: ${dateLabel($('rateDate').value)}`;if($('buyMode').value==='cbr')$('buyRate').value=$('cny').value;}if(e.target.id==='rateConfirmed'&&e.target.checked)$('rateCheckedDate').value=todayDate();if(e.target.id==='buyMode'&&$('buyMode').value==='cbr')$('buyRate').value=$('cny').value;render();});
  $('manualMode').addEventListener('click',()=>entryMode(true));$('catalogMode').addEventListener('click',()=>entryMode(false));
 
  document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
  $('reviewSpecs').addEventListener('click',()=>{$('confirmSpecs').scrollIntoView({behavior:'smooth',block:'center'});$('confirmSpecs').focus({preventScroll:true});});
  $('refreshRate').addEventListener('click',refreshRate);$('refreshCustomsRate').addEventListener('click',refreshRate);$('makeQuote').addEventListener('click',()=>save(true));$('saveQuote').addEventListener('click',()=>save(false));$('reloadHistory').addEventListener('click',loadHistory);
  $('toggleTrash').addEventListener('click',()=>{showTrash=!showTrash;loadHistory();});
- $('historyList').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.delete||b.dataset.restore){b.disabled=true;try{const restoring=!!b.dataset.restore;await api('/api/quotes/'+(b.dataset.restore||b.dataset.delete)+(restoring?'/restore':''),{method:restoring?'POST':'DELETE'});await loadHistory();toast(restoring?'Отчёт восстановлен.':'Отчёт перемещён в удалённые. Его можно восстановить.');}catch(e){toast(e.message);b.disabled=false;}return;}if(b.dataset.report)openQuote(quotes.find(q=>q.id===b.dataset.report));if(b.dataset.copy){const q=quotes.find(q=>q.id===b.dataset.copy);fill(q.input);setView('calculator');toast('Открыта копия. Старое предложение осталось без изменений.');}});
+ $('historyList').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.delete||b.dataset.restore){b.disabled=true;try{const restoring=!!b.dataset.restore;await api('/api/quotes/'+(b.dataset.restore||b.dataset.delete)+(restoring?'/restore':''),{method:restoring?'POST':'DELETE'});await loadHistory();toast(restoring?'Отчёт восстановлен.':'Отчёт перемещён в удалённые. Его можно восстановить.');}catch(e){toast(e.message);b.disabled=false;}return;}if(b.dataset.report)openQuote(quotes.find(q=>q.id===b.dataset.report));if(b.dataset.copy){const q=quotes.find(q=>q.id===b.dataset.copy);fill(q.input);if(needsRateRefresh(collect(),todayDate()))await refreshRate();setView('calculator');toast('Открыта копия. Старое предложение осталось без изменений.');}});
  $('catalogSearch').addEventListener('input',catalogFilter);$('catalogFuel').addEventListener('change',catalogFilter);
  $('catalogList').addEventListener('click',e=>{const b=e.target.closest('[data-select]');if(b){chooseModel(b.dataset.select);setView('calculator');}});
  $('closeQuote').addEventListener('click',()=>$('quoteDialog').close());$('printQuote').addEventListener('click',()=>{window.print();});
@@ -110,7 +190,13 @@ async function init(){try{[catalog,rates,company]=await Promise.all([api('/catal
  });
  $('goToError').addEventListener('click',()=>{if(!invalidField)return;let parent=invalidField.parentElement;while(parent){if(parent.tagName==='DETAILS')parent.open=true;parent=parent.parentElement;}invalidField.scrollIntoView({block:'center'});invalidField.focus({preventScroll:true});});
 
- await loadHistory();if(!$('cny').value||($('buyMode').value==='cbr'&&draft?.calcDate!==todayDate()))await refreshRate();render();
+ $('modelSearch').addEventListener('input',catalogRender);$('modelResults').addEventListener('click',e=>{const b=e.target.closest('[data-model-id]');if(!b)return;chooseModel(b.dataset.modelId);$('modelSearch').value='';catalogRender();$('modelSearch').focus();});$('modelSelection').addEventListener('click',e=>{if(!e.target.closest('#changeModel'))return;$('modelSearch').focus();$('modelSearch').select();});
+ $('readiness').addEventListener('click',e=>{const b=e.target.closest('[data-ready-target]');if(!b)return;const target=$(b.dataset.readyTarget);let parent=target?.parentElement;while(parent){if(parent.tagName==='DETAILS')parent.open=true;parent=parent.parentElement;}target?.scrollIntoView({behavior:'smooth',block:'center'});target?.focus({preventScroll:true});});$('mobileTotalBar').addEventListener('click',()=>document.querySelector('.result-card').scrollIntoView({behavior:'smooth',block:'start'}));
+ for(const id of ['historySearch','historyFrom','historyTo'])$(id).addEventListener('input',historyRender);
+ $('exportBackup').addEventListener('click',async()=>{try{downloadJSON(await api('/api/backup'),'BMW-Import-backup-'+todayDate()+'.json');toast('Резервная копия подготовлена.');}catch(e){toast(e.message);}});
+ $('importBackup').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>50000000)throw Error('Файл превышает 50 МБ.');const r=await post('/api/backup/import',JSON.parse(await file.text()));await loadHistory();toast(`Восстановлено расчётов: ${r.imported}. Существующие записи сохранены.`);}catch(e){toast(e.message);}finally{e.target.value='';}});
+ window.addEventListener('focus',checkToday);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkToday();});setInterval(checkToday,60000);
+ await loadHistory();if(needsRateRefresh(collect(),todayDate()))await refreshRate();render();
  }catch(e){$('resultMessage').textContent='Не удалось загрузить приложение: '+e.message;toast(e.message);}}
 init();
 

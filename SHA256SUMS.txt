@@ -1,2 +1,2 @@
-1ae127cde523da0875cff05d2ebe7cfa079523cde174b8dbd3bee2a0e52466f7  BMW-Import-0.5.2-Apple-Silicon.pkg
-37d89e7a19b10605452412e638b62168926744679370499fad29ea9b8ad5aa02  BMW-Import-0.5.2-Apple-Silicon.zip
+2b1783563bbf697e1e27837960f3768170b0760da22c612d00f911d9a672f5ca  BMW-Import-0.6.0-Apple-Silicon.pkg
+f89cf31df8b16214743ae305bebe3d47fabedc9cb1b1ce3c6ab80904e8df0008  BMW-Import-0.6.0-Apple-Silicon.zip

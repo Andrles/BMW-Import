@@ -1,0 +1,5 @@
+BMW hero illustration
+Mode: imagegen / generate
+Asset: bmw-hero.png
+AI-generated photorealistic illustration, not a photograph of a vehicle offered for sale. Depicts BMW 3 Series regardless of the model selected in the calculator.
+Prompt: Use case: product-mockup. Asset type: wide hero photograph for a premium BMW import calculator desktop application. Create a highly photorealistic automotive studio photograph of a metallic silver BMW 3 Series G20/G28 LCI sedan, front three-quarter view, facing left, recognizable restrained twin kidney grille and realistic wheels and headlights. Whole car fully in frame. Dark deep navy seamless studio background and floor, subtle believable floor reflection, crisp softbox highlights, premium understated photography, not illustration or cartoon. Wide landscape composition about 2:1, car occupies right two thirds with ample dark negative space in left third for interface text. No typography, no watermark, no scenery, no people. Realistic proportions and physical details.

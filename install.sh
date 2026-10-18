@@ -1,13 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 # Pinned release; download and verify before asking for administrator access.
-VERSION="0.5.2"
+VERSION="0.6.0"
 ASSET="BMW-Import-${VERSION}-Apple-Silicon.pkg"
-SHA256="1ae127cde523da0875cff05d2ebe7cfa079523cde174b8dbd3bee2a0e52466f7"
+SHA256="d7502c093d1af6daf4f4d26cf1655d6120227b30fe76d97cd91155f15cfa045f"
 URL="https://github.com/Andrles/BMW-Import/releases/download/v${VERSION}/${ASSET}"
 [[ "$(uname -s)" == "Darwin" ]] || { echo "Requires macOS." >&2; exit 1; }
 [[ "$(uname -m)" == "arm64" ]] || { echo "Requires Apple Silicon. On Apple Silicon, run Terminal without Rosetta." >&2; exit 1; }
-OS_VERSION="$(sw_vers -productVersion)"
+OS_VERSION="0.6.0"
 OS_MAJOR="${OS_VERSION%%.*}"
 OS_REST="${OS_VERSION#*.}"
 OS_MINOR="${OS_REST%%.*}"

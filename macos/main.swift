@@ -2,7 +2,7 @@ import Cocoa
 import WebKit
 import UniformTypeIdentifiers
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, NSSharingServicePickerDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSSharingServicePickerDelegate {
     var window: NSWindow!
     var web: WKWebView!
     var server: Process?
@@ -10,13 +10,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var attempts = 0
     var sharePicker: NSSharingServicePicker?
     var requestedChannel = ""
-    let base = URL(string: "http://127.0.0.1:18765")!
+    let testMode = ProcessInfo.processInfo.environment["BMW_TESTING"] == "1"
+    lazy var port = testMode ? (Int(ProcessInfo.processInfo.environment["BMW_TEST_PORT"] ?? "18766") ?? 18766) : 18765
+    lazy var base = URL(string: "http://127.0.0.1:\(port)")!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu()
         let appItem = NSMenuItem(); menu.addItem(appItem)
         let appMenu = NSMenu(); appItem.submenu = appMenu
         appMenu.addItem(withTitle: "О BMW Import", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Скрыть BMW Import", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Завершить BMW Import", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let editItem = NSMenuItem(); menu.addItem(editItem)
@@ -31,11 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "printQuote")
         config.userContentController.add(self, name: "shareQuote")
+        config.userContentController.add(self, name: "saveBackup")
         config.userContentController.addUserScript(WKUserScript(source: "window.print = function(){window.webkit.messageHandlers.printQuote.postMessage('print');};", injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         web = WKWebView(frame: .zero, configuration: config)
-        web.navigationDelegate = self
+        web.navigationDelegate = self; web.uiDelegate = self
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 860), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "BMW Import"
+        window.title = testMode ? "BMW Import — проверка 0.6.0" : "BMW Import"
         window.minSize = NSSize(width: 760, height: 600)
         window.contentView = web
         window.center(); window.makeKeyAndOrderFront(nil)
@@ -43,7 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         web.loadHTMLString("<body style='background:#0d1729;color:white;font:24px -apple-system;padding:60px'>BMW IMPORT<br><small>Запуск приложения…</small></body>", baseURL: nil)
         do {
             let resources = Bundle.main.resourceURL!
-            let data = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("BMW Import", isDirectory: true)
+            var data = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("BMW Import", isDirectory: true)
+            if testMode, let testData = ProcessInfo.processInfo.environment["BMW_TEST_DATA"] { data = URL(fileURLWithPath: testData, isDirectory: true) }
             if !FileManager.default.fileExists(atPath: data.path) {
                 try FileManager.default.copyItem(at: resources.appendingPathComponent("initialData"), to: data)
             }
@@ -51,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             process.executableURL = resources.appendingPathComponent("node")
             process.arguments = [resources.appendingPathComponent("app/server.mjs").path]
             var env = ProcessInfo.processInfo.environment
-            env["BMW_PORT"] = "18765"; env["BMW_DATA_DIR"] = data.path
+            env["BMW_PORT"] = String(port); env["BMW_DATA_DIR"] = data.path
             process.environment = env
             let log = data.appendingPathComponent("desktop.log")
             FileManager.default.createFile(atPath: log.path, contents: nil)
@@ -87,8 +92,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let origin = message.frameInfo.request.url,
-              origin.scheme == "http", origin.host == "127.0.0.1", origin.port == 18765 else { return }
+              origin.scheme == "http", origin.host == "127.0.0.1", origin.port == port else { return }
         if message.name == "printQuote" { printPage(); return }
+        if message.name == "saveBackup", let payload = message.body as? [String: String], let json = payload["json"], json.utf8.count <= 50_000_000, let data = json.data(using: .utf8), (try? JSONSerialization.jsonObject(with: data)) != nil {
+            let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "BMW-Import-backup.json"
+            panel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = panel.url else { return }
+                do { try data.write(to: url, options: .atomic) } catch { self.shareError(error.localizedDescription) }
+            }; return
+        }
         guard message.name == "shareQuote", let payload = message.body as? [String: String],
               let raw = payload["dataURL"], raw.hasPrefix("data:image/png;base64,"), raw.count < 30_000_000,
               let data = Data(base64Encoded: String(raw.dropFirst("data:image/png;base64,".count))),
@@ -121,14 +133,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return matches.isEmpty ? proposedServices : matches
     }
     func shareError(_ message: String) {
-        let alert = NSAlert(); alert.messageText = "Не удалось подготовить изображение"; alert.informativeText = message
+        let alert = NSAlert(); alert.messageText = "Не удалось сохранить или передать файл"; alert.informativeText = message
         alert.beginSheetModal(for: window)
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
-        if url.scheme == "about" || (url.host == "127.0.0.1" && url.port == 18765) { decisionHandler(.allow) }
+        if url.scheme == "about" || (url.host == "127.0.0.1" && url.port == port) { decisionHandler(.allow) }
         else { if ["https", "http"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }; decisionHandler(.cancel) }
     }
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        guard frame.isMainFrame, frame.request.url?.host == "127.0.0.1", frame.request.url?.port == port else { completionHandler(nil); return }
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.allowsMultipleSelection = false; panel.canChooseDirectories = false
+        panel.beginSheetModal(for: window) { response in completionHandler(response == .OK ? panel.urls : nil) }
+    }
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url, ["https", "http"].contains(url.scheme ?? ""), url.host != "127.0.0.1" { NSWorkspace.shared.open(url) }; return nil
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { window.makeKeyAndOrderFront(nil); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationWillTerminate(_ notification: Notification) { timer?.invalidate(); if server?.isRunning == true { server?.terminate(); server?.waitUntilExit() } }
 }
